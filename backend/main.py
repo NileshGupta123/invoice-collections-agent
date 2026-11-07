@@ -1,5 +1,6 @@
 """FastAPI app: REST endpoints for the invoice dashboard and the agent."""
 
+import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
@@ -15,14 +16,26 @@ from backend.paypal_client import PayPalError
 @asynccontextmanager
 async def lifespan(app):
     database.init_db()
+    # Free hosting wipes the local database on restart, so restore it from PayPal.
+    if not database.list_invoices():
+        try:
+            services.sync_all()
+        except Exception as exc:
+            print(f"Startup sync skipped: {exc}")
     yield
 
 
 app = FastAPI(title="AI Invoice and Collections Agent API", lifespan=lifespan)
 
+ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+for origin in os.getenv("FRONTEND_ORIGINS", "").split(","):
+    origin = origin.strip().rstrip("/")
+    if origin:
+        ALLOWED_ORIGINS.append(origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
